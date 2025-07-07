@@ -4,7 +4,7 @@ import GenerateSyntax
 import Graphql.Generator.AnnotatedArg as AnnotatedArg
 import Graphql.Generator.Context exposing (Context)
 import Graphql.Generator.Decoder as Decoder
-import Graphql.Generator.InputObjectFile.Details exposing (InputObjectDetails)
+import Graphql.Generator.InputObjectFile.Details as InputObjectDetails exposing (InputObjectDetails)
 import Graphql.Generator.Let as Let
 import Graphql.Parser.CamelCaseName as CamelCaseName exposing (CamelCaseName)
 import Graphql.Parser.ClassCaseName as ClassCaseName exposing (ClassCaseName)
@@ -13,16 +13,92 @@ import String.Interpolate exposing (interpolate)
 
 
 generate : Context -> InputObjectDetails -> String
-generate context { name, fields, hasLoop } =
+generate context details =
+    if details.isOneOf then
+        unionConstructor context details
+
+    else
+        aliasConstructor context details
+
+
+unionConstructor : Context -> InputObjectDetails -> String
+unionConstructor context ({ name, fields, hasLoop } as inputDetails) =
     let
         optionalFields =
+            InputObjectDetails.pickOptionalFields inputDetails
+
+        returnRecord =
             fields
-                |> List.filter
+                |> List.map
                     (\field ->
-                        case field.typeRef of
-                            Type.TypeReference referrableType isNullable ->
-                                isNullable == Type.Nullable
+                        interpolate "{0} = {1}.{0}"
+                            [ CamelCaseName.normalized field.name
+                            , case field.typeRef of
+                                Type.TypeReference referrableType isNullable ->
+                                    case isNullable of
+                                        Type.Nullable ->
+                                            "optionals____"
+
+                                        Type.NonNullable ->
+                                            "required____"
+                            ]
                     )
+                |> String.join ", "
+
+        annotation =
+            AnnotatedArg.buildWithArgs
+                ([ when (List.length requiredFields > 0)
+                    ( interpolate "{0}RequiredFields" [ ClassCaseName.normalized name ]
+                    , "required____"
+                    )
+                 , when (List.length optionalFields > 0)
+                    ( interpolate "({0}OptionalFields -> {0}OptionalFields)" [ ClassCaseName.normalized name ]
+                    , "fillOptionals____"
+                    )
+                 ]
+                    |> compact
+                )
+                (ClassCaseName.normalized name)
+                |> AnnotatedArg.toString ("build" ++ ClassCaseName.normalized name)
+
+        letClause =
+            Let.generate
+                ([ when (List.length optionalFields > 0)
+                    ( "optionals____"
+                    , interpolate """
+                fillOptionals____
+                    { {0} }"""
+                        [ filledOptionalsRecord optionalFields ]
+                    )
+                 ]
+                    |> compact
+                )
+    in
+    interpolate
+        """{0}{1}
+        {2}{ {3} }
+
+    {4}
+    {5}
+    """
+        [ annotation
+        , letClause
+        , if hasLoop then
+            ClassCaseName.normalized name
+
+          else
+            ""
+        , returnRecord
+        , constructorFieldsAlias (ClassCaseName.normalized name ++ "RequiredFields") context requiredFields
+        , constructorFieldsAlias (ClassCaseName.normalized name ++ "OptionalFields") context optionalFields
+        ]
+
+
+aliasConstructor : Context -> InputObjectDetails -> String
+aliasConstructor context ({ name, fields, hasLoop } as inputDetails) =
+    let
+        optionalFields =
+            InputObjectDetails.pickOptionalFields inputDetails
 
         requiredFields =
             fields
@@ -72,8 +148,8 @@ generate context { name, fields, hasLoop } =
                 ([ when (List.length optionalFields > 0)
                     ( "optionals____"
                     , interpolate """
-            fillOptionals____
-                { {0} }"""
+                fillOptionals____
+                    { {0} }"""
                         [ filledOptionalsRecord optionalFields ]
                     )
                  ]
@@ -82,11 +158,11 @@ generate context { name, fields, hasLoop } =
     in
     interpolate
         """{0}{1}
-    {2}{ {3} }
+        {2}{ {3} }
 
-{4}
-{5}
-"""
+    {4}
+    {5}
+    """
         [ annotation
         , letClause
         , if hasLoop then
