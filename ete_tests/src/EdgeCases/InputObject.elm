@@ -34,7 +34,7 @@ type alias RegularShapeInputOptionalFields =
     { kind : OptionalArgument EdgeCases.Enum.RegularShapeInputKind.RegularShapeInputKind }
 
 
-{-| Type for the RegularShapeInput input object.
+{-| Type for the RegularShapeInput input object isOneOf: false.
 -}
 type alias RegularShapeInput =
     { kind : OptionalArgument EdgeCases.Enum.RegularShapeInputKind.RegularShapeInputKind }
@@ -66,7 +66,7 @@ type alias ShapeInputOptionalFields =
     }
 
 
-{-| Type for the ShapeInput input object.
+{-| Type for the ShapeInput input object isOneOf: false.
 -}
 type alias ShapeInput =
     { kind : OptionalArgument String
@@ -89,28 +89,25 @@ buildShapeInputOneOf fillOptionals____ =
     let
         optionals____ =
             fillOptionals____
-                { base = Absent, regular = Absent }
+                { base = Absent, regular = Absent, recursive = Absent }
     in
-    { base = optionals____.base, regular = optionals____.regular }
+    ShapeInputOneOf { base = optionals____.base, regular = optionals____.regular, recursive = optionals____.recursive }
 
 
 type alias ShapeInputOneOfOptionalFields =
     { base : OptionalArgument ShapeInput
     , regular : OptionalArgument RegularShapeInput
+    , recursive : OptionalArgument ShapeInputOneOf
     }
 
 
-{-| Type for the ShapeInputOneOf input object.
+{-| Loop oneOf case
 -}
-type alias ShapeInputOneOf =
-    { base : OptionalArgument ShapeInput
-    , regular : OptionalArgument RegularShapeInput
-    }
 
 
 {-| Encode a ShapeInputOneOf into a value that can be used as an argument.
 -}
 encodeShapeInputOneOf : ShapeInputOneOf -> Value
-encodeShapeInputOneOf input____ =
+encodeShapeInputOneOf (ShapeInputOneOf input____) =
     Encode.maybeObject
-        [ ( "base", encodeShapeInput |> Encode.optional input____.base ), ( "regular", encodeRegularShapeInput |> Encode.optional input____.regular ) ]
+        [ ( "base", encodeShapeInput |> Encode.optional input____.base ), ( "regular", encodeRegularShapeInput |> Encode.optional input____.regular ), ( "recursive", encodeShapeInputOneOf |> Encode.optional input____.recursive ) ]

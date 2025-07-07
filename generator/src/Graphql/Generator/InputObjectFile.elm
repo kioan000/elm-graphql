@@ -69,20 +69,22 @@ placeholder =
 generateEncoderAndAlias : Context -> InputObjectDetails -> String
 generateEncoderAndAlias context inputObjectDetails =
     [ Constructor.generate context inputObjectDetails
-    , typeAlias context inputObjectDetails
+    , typeDefinition context inputObjectDetails
     , encoder context inputObjectDetails
     ]
         |> String.join "\n\n"
 
 
-typeAlias : Context -> InputObjectDetails -> String
-typeAlias context { name, fields, hasLoop } =
-    (if hasLoop then
-        interpolate """{-| Type alias for the `{0}` attributes. Note that this type
-needs to use the `{0}` type (not just a plain type alias) because it has
-references to itself either directly (recursive) or indirectly (circular). See
-<https://github.com/dillonkearns/elm-graphql/issues/33>.
--}
+typeDefinition : Context -> InputObjectDetails -> String
+typeDefinition context { name, fields, hasLoop, isOneOf } =
+    case ( hasLoop, isOneOf ) of
+        ( True, False ) ->
+            interpolate """{-| Type alias for the `{0}` attributes. Note that this type
+                needs to use the `{0}` type (not just a plain type alias) because it has
+                references to itself either directly (recursive) or indirectly (circular). See
+                <https://github.com/dillonkearns/elm-graphql/issues/33>.
+                isOneOf: {2}
+                -}
 type alias {0}Raw =
     {1}
 
@@ -91,18 +93,38 @@ type alias {0}Raw =
 -}
 type {0}
     = {0} {0}Raw
-    """
+                    """
+                [ ClassCaseName.normalized name
+                , List.map (aliasEntry context) fields |> GenerateSyntax.typeAlias
+                , boolToString isOneOf
+                ]
 
-     else
-        interpolate """{-| Type for the {0} input object.
+        ( False, False ) ->
+            interpolate
+                """{-| Type for the {0} input object isOneOf: {2}.
 -}
 type alias {0} =
-    {1}
-    """
-    )
-        [ ClassCaseName.normalized name
-        , List.map (aliasEntry context) fields |> GenerateSyntax.typeAlias
-        ]
+     {1}
+                    """
+                [ ClassCaseName.normalized name
+                , List.map (aliasEntry context) fields |> GenerateSyntax.typeAlias
+                , boolToString isOneOf
+                ]
+
+        ( True, True ) ->
+            """{-| Loop oneOf case -}"""
+
+        ( False, True ) ->
+            """{-| Simple oneOf case -} """
+
+
+boolToString : Bool -> String
+boolToString val =
+    if val then
+        "true"
+
+    else
+        "false"
 
 
 aliasEntry : Context -> Type.Field -> ( String, String )
